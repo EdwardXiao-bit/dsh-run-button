@@ -1,0 +1,36 @@
+#!/bin/sh
+# Gate every commit that touches the client half.
+#
+# A throwing apply() in lib/client.js does not degrade this plugin — it replaces
+# the whole application with "Failed to load plugins". Three separate incidents
+# shipped that way, each one a fresh mistake in a rewrite of the same file. This
+# hook makes the verification structural instead of advisory.
+#
+# Enable it once per clone (also wired to `npm run setup`):
+#   git config core.hooksPath .githooks
+#
+# Bypass deliberately, only when you know why (never for lib/):
+#   git commit --no-verify
+
+set -e
+
+staged="$(git diff --cached --name-only)"
+
+case "$staged" in
+  *lib/client.js*|*lib/index.js*|*scripts/check-client.mjs*|*scripts/simulate-client.mjs*)
+    echo "dsh-run-button: client half or its gates changed — running npm run check"
+    if command -v npm >/dev/null 2>&1; then
+      npm run --silent check || {
+        echo ""
+        echo "COMMIT REFUSED: npm run check failed."
+        echo "This is exactly the class of fault that turns the app into"
+        echo "'Failed to load plugins'. Fix it, or use --no-verify if you are certain."
+        exit 1
+      }
+    else
+      echo "WARNING: npm not on PATH — cannot verify the client half before commit."
+    fi
+    ;;
+esac
+
+exit 0
