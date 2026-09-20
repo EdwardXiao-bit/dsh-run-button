@@ -1,6 +1,6 @@
 # dsh-run-button
 
-**A Run button for every shell code block in a DSH reply.** Press it and the snippet executes on the host, with stdout/stderr streaming live into a **Run output** tab in the bottom workbench — the same panel that hosts the terminal.
+**A Run button for every shell code block in a DSH reply.** Press it and the snippet executes on the host, with stdout/stderr streaming live into a **floating dock at the bottom-right corner** (the default). No optional plugins are required: a `Panel` mode can instead route each run into a bottom-workbench tab, and it is the only mode that uses [`dsh-better-sidebar`](https://github.com/omdsh-dev/DSH-better-sidebar) — see [Output surfaces](#output-surfaces).
 
 > Status: `0.1.0` — working plugin package, hand-authored (no bundler, no TypeScript build).
 
