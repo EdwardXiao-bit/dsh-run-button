@@ -96,7 +96,8 @@ dsh-run-button/
 ├── cordis.patch.yml      profile row: - insert: [{id: run-button, name: dsh-run-button}]
 ├── lib/index.js          HOST  — ESM Cordis plugin
 ├── lib/client.js         CLIENT — classic-script bundle (window.__ModuleLoader__)
-└── scripts/check-client.mjs   syntax gate for the browser bundle
+├── scripts/check-client.mjs       syntax gate for the browser bundle
+└── scripts/check-client-apply.mjs runs apply() twice (degraded + stubbed host) and checks descriptor fields
 ```
 
 **Host half** (`lib/index.js`) mounts a dedicated loopback RPC channel, `/dsh-run-button`, with endpoints `info`, `start`, `output`, `input`, `kill`. `start` resolves the session's cwd and sandbox policy, then uses the shipped `shell` service (`ctx.shell.resolve` → `ctx.shell.start`) to launch the command and hold a background process handle. `output` reads **incremental** deltas (`readOutput()` never repeats text) and returns a JSON-safe view: status, exit code, signal, cwd, sandbox mode, and the accumulated streams. Every side effect is a `ctx.effect`, including killing live processes on teardown.
@@ -126,7 +127,57 @@ window.__ModuleLoader__.load({
 
 `require` resolves only against the shell's frozen baseline (`react`, `react/jsx-runtime`, `react-dom`, `@deepseek-ai/cordis`, …), which is why this plugin needs nothing beyond `react`.
 
-Run `node scripts/check-client.mjs` to parse-and-materialize the bundle outside a browser before publishing.
+Run both gates before publishing:
+
+```bash
+node scripts/check-client.mjs        # parse + materialize the factory (does not run apply)
+node scripts/check-client-apply.mjs  # stub DOM/ctx: two apply() passes, registerTab descriptor field-checked
+```
+
+The second one covers the inside of `apply()` with two passes: one where every service lookup misses (the degraded wiring), and one against a **contract-checking better-sidebar stub** — an undefined identifier, a string treated as an array, or a `registerTab` call missing `component` fails there with a non-zero exit instead of turning into a white screen or a crashed sidebar tab. Note that `apply()` may swallow the registration error itself, so the verdict comes from what the stub observed, not from whether `apply()` threw. Read [Host contracts](#host-contracts-read-before-touching-the-client-half) before touching the client half.
+
+## Host contracts (read before touching the client half)
+
+`lib/client.js` is hand-written plain JS with no type checking behind it: an invented API or a missing required field does not fail the build — it becomes a white screen or a crashed sidebar tab. These contracts are taken from the host's own definitions.
+
+### Injecting CSS: there is no `styles` service
+
+The client kernel does **not** provide a `styles` service, and `ctx.get("styles")` yields nothing. Insert a `<style>` element yourself and remove it symmetrically in teardown (`apply()` can run more than once):
+
+```js
+var tag = document.createElement("style");
+tag.id = PREFIX + "-styles";
+tag.textContent = CSS;          // in this repo CSS is a string (array .join("")), not an array
+document.head.appendChild(tag);
+```
+
+### `ctx.betterSidebar.registerTab()`: `component` is required
+
+`TabDescriptor` (see `dsh-better-sidebar/src/client/service.ts`):
+
+| Field | Required | Notes |
+| --- | --- | --- |
+| `id` | ✅ | Unique id; also the `SidebarTab.type`. |
+| `title` | ✅ | `string \| (() => string)` |
+| `component` | ✅ | `(props: TabComponentProps) => ReactNode`. **Omitting it means `createElement(undefined)` → React #130.** |
+| `description` | | One line in the host's new-tab list. |
+| `icon` | | `ReactNode \| ((size: number) => ReactNode)` |
+| `order` | | Menu sort order, default 100. |
+| `hidden` | | Keep it out of the `+` menu. |
+| `available` | | `(ctx, scope, state) => boolean` |
+| `single` / `dedupeKey` | | Single instance / custom dedupe. |
+| `createTab` | | Mint the tab and any state patch. |
+| `urlTarget` | | Claim external-link clicks. |
+| `settings` / `badge` | | Settings toggles / tab-strip badge. |
+| `onOpen` / `onActivate` / `onClose` | | Lifecycle callbacks. |
+
+`component` receives `TabComponentProps`: `ctx`, `store`, `scope`, `tab`, and `visible` (active **and** panel open — pause polling when false).
+
+Function declarations hoist, so `component: RunTab` may precede `function RunTab()`.
+
+### How a render error surfaces
+
+`dsh-better-sidebar`'s `RenderBoundary` has two scopes: ROOT (the whole sidebar shell, `index.tsx`) and PER-TAB (one tab, `Sidebar.tsx`'s `TabContent`). Either way the strip reads `dsh-better-sidebar: <message>`. **That prefix points at a tab registered by run-button, not at the sidebar itself** — the shell and the other tabs usually stay alive.
 
 ## Configuration
 

@@ -96,7 +96,8 @@ dsh-run-button/
 ├── cordis.patch.yml      profile 行：- insert: [{id: run-button, name: dsh-run-button}]
 ├── lib/index.js          HOST  — ESM Cordis 插件
 ├── lib/client.js         CLIENT — 经典脚本 bundle（window.__ModuleLoader__）
-└── scripts/check-client.mjs   浏览器 bundle 的语法闸门
+├── scripts/check-client.mjs       浏览器 bundle 的语法闸门（解析 + 物化）
+└── scripts/check-client-apply.mjs 两次 apply()（降级 + 桩宿主）并校验描述符必填字段
 ```
 
 **Host 半边**（`lib/index.js`）挂一条专用回环 RPC 通道 `/dsh-run-button`，端点 `info`、`start`、`output`、`input`、`kill`。`start` 解析会话的 cwd 与沙箱策略，然后用内置 `shell` 服务（`ctx.shell.resolve` → `ctx.shell.start`）启动命令并持有后台进程句柄。`output` 读取**增量** delta（`readOutput()` 不会重复吐已读内容），返回 JSON 安全的视图：状态、退出码、信号、cwd、沙箱模式与累积输出。所有副作用都是 `ctx.effect`，其中包含卸载时杀掉活动进程。
@@ -126,7 +127,64 @@ window.__ModuleLoader__.load({
 
 `require` 只能命中 shell 冻结的基线表（`react`、`react/jsx-runtime`、`react-dom`、`@deepseek-ai/cordis` 等），所以这个插件除 `react` 外不依赖任何东西。
 
-发布前可跑 `node scripts/check-client.mjs`，在浏览器之外解析并实例化该 bundle。
+发布前跑这两条闸门：
+
+```bash
+node scripts/check-client.mjs        # 解析 + 物化 factory（不执行 apply）
+node scripts/check-client-apply.mjs  # 打桩 DOM/ctx：跑两次 apply()，并逐字段校验 registerTab 描述符
+```
+
+第二条覆盖 `apply()` 内部，跑两遍：一遍所有服务都拿不到（降级路径），一遍给一个**校验契约的 better-sidebar 桩**（未定义标识符、把字符串当数组、往 `registerTab` 漏传 `component` 都会在这里失败并以非 0 退出码结束），而不是变成白屏或崩掉的侧栏标签页。注意 `apply()` 可能自己吞掉注册异常 —— 所以判定依据是桩观察到了什么，不是有没有抛错。动 client 半边之前请先读[宿主契约](#宿主契约写-client-半边前必读)。
+
+## 宿主契约（写 client 半边前必读）
+
+`lib/client.js` 是手写纯 JS，没有类型检查兜底：臆造 API、漏填必填字段都不会在构建期报错，只会变成整页白屏或崩掉的侧栏标签页。以下契约摘自宿主的实际定义。
+
+### 注入 CSS：内核没有 `styles` 服务
+
+客户端内核**不提供** `styles` 服务，`ctx.get("styles")` 也拿不到东西。全局样式自己插 `<style>`，并在 teardown 里对称移除（`apply()` 可能被反复调用）：
+
+```js
+var tag = document.createElement("style");
+tag.id = PREFIX + "-styles";
+tag.textContent = CSS;          // 本项目的 CSS 是字符串（数组 .join("") 得到），不是数组
+document.head.appendChild(tag);
+
+ctx.effect(function () {
+  return function () {
+    var existing = document.getElementById(PREFIX + "-styles");
+    if (existing !== null) existing.remove();
+  };
+}, "dsh-run-button: css teardown");
+```
+
+### `ctx.betterSidebar.registerTab()`：`component` 是必填
+
+`TabDescriptor`（定义见 `dsh-better-sidebar/src/client/service.ts`）：
+
+| 字段 | 必填 | 说明 |
+| --- | --- | --- |
+| `id` | ✅ | 唯一 id，同时是 `SidebarTab.type` |
+| `title` | ✅ | `string \| (() => string)` |
+| `component` | ✅ | `(props: TabComponentProps) => ReactNode`。**漏传即 `createElement(undefined)` → React #130** |
+| `description` | | 新标签页列表里的一行说明 |
+| `icon` | | `ReactNode \| ((size: number) => ReactNode)` |
+| `order` | | 菜单排序，默认 100 |
+| `hidden` | | 不在 `+` 菜单里出现 |
+| `available` | | `(ctx, scope, state) => boolean` |
+| `single` / `dedupeKey` | | 单实例 / 自定义去重 |
+| `createTab` | | 自定义开页（铸 id + 状态补丁） |
+| `urlTarget` | | 接管外部链接点击 |
+| `settings` / `badge` | | 设置页开关 / 标签页角标 |
+| `onOpen` / `onActivate` / `onClose` | | 生命周期回调 |
+
+`component` 收到的 `TabComponentProps`：`ctx`、`store`、`scope`、`tab`、`visible`（是否活动且面板展开 —— 不 live 时应暂停轮询）。
+
+函数声明会提升，所以 `component: RunTab` 可以写在 `function RunTab()` 之前。
+
+### 渲染错误的可见形态
+
+`dsh-better-sidebar` 的 `RenderBoundary` 有两个作用域：ROOT（整个侧栏外壳，`index.tsx`）与 PER-TAB（单个标签页，`Sidebar.tsx` 的 `TabContent`）。报错前缀统一是 `dsh-better-sidebar: <message>`。**看到这个前缀先怀疑 run-button 注册的标签页，而不是侧栏本身** —— 外壳和其他标签页通常是好的。
 
 ## 配置
 
