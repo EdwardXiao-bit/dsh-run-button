@@ -13,21 +13,24 @@ DSH renders assistant answers as Markdown, and a fenced code block gets exactly 
 This plugin adds the missing verb. Code blocks whose language is a command line get a **▶ Run** chip next to Copy. Click it and:
 
 - the command runs **on the host**, in the session's own workspace directory and sandbox;
-- output lands in a **Run output** tab in the bottom workbench, which opens and expands on the first run of the session — the same place the terminal lives, so it does not cover the conversation;
+- output streams into a **floating dock at the bottom-right corner** — one card per run, newest first, never covering the conversation;
 - the chip reflects state — `▶ Run` → `■ Stop` → `✓ Run` (exit 0) or `✕ Run` (non-zero / killed);
-- a run strip above the composer lists active and recent runs, and clicking one brings the workbench tab forward;
-- long-running commands can be stopped from either the chip or the tab.
+- a run strip above the composer lists active and recent runs: click a chip to re-open that run's card, or its `×` to drop the run;
+- long-running commands can be stopped from the chip, the dock card, or the workbench tab.
 
-### Output surface: dsh-better-sidebar
+### Output surfaces
 
-The bottom-panel tab is provided through [`dsh-better-sidebar`](https://github.com/omdsh-dev/DSH-better-sidebar)'s public `ctx.betterSidebar` service (`registerTab` + `openTab({ target: 'bottom' })`), the same extension point its built-in terminal, git, and task tabs use.
+Three modes, switchable from the strip (`Dock` / `Panel` / `Off`); the choice is remembered:
 
-That plugin is an **optional** dependency, not a requirement:
+| Mode | Where output goes | Needs anything extra? |
+| --- | --- | --- |
+| **Dock** (default) | One floating card per run, in a fixed bottom-right stack | no |
+| **Panel** | A bottom-workbench tab per run — the same panel the terminal lives in | [`dsh-better-sidebar`](https://github.com/omdsh-dev/DSH-better-sidebar) |
+| **Off** | Nowhere; the chip still reports status | no |
 
-| `dsh-better-sidebar` | Behaviour |
-| --- | --- |
-| mounted | Runs get a real workbench tab next to the terminal; the panel opens and expands automatically on the session's first run |
-| absent | Commands still execute through the Host channel and the chips still report status — there is simply no output surface to render into |
+`Panel` is offered through `dsh-better-sidebar`'s public `ctx.betterSidebar` service (`registerTab` + `openTab({ target: 'bottom' })`), the same extension point its built-in terminal, git, and task tabs use. That plugin is an **optional** peer: when it is absent, `Panel` is disabled and `Dock` remains the default, so the plugin is fully usable with no extra dependency.
+
+Cards are deliberately **not** anchored to the code block that started the run. Anchoring looks tidier until the block scrolls out of the virtualized transcript, the anchor lookup fails, and the same run renders in two places at once. A stable corner dock has no such failure mode.
 
 
 ## What it recognises
@@ -138,7 +141,7 @@ node scripts/simulate-client.mjs   # mount it against a real DOM and drive the w
 
 - asserts the Run chip was injected into the banner and clicks it;
 - asserts `run/start` and `output` were actually called on the RPC channel;
-- switches output mode and asserts inline panels appear, then disappear;
+- switches output mode and asserts dock cards appear, then disappear, and that exactly one dock container exists with one card per run;
 - asserts the tab type is registered, does **not** dedupe, and that two runs produce **two distinct tab ids each carrying its own `runId`** — the per-run pairing, which is the thing most likely to silently regress;
 - unmounts and asserts nothing was left behind.
 
@@ -209,7 +212,7 @@ None required. Behaviour that can be tuned:
 
 - Only command-line fences are runnable (`js`, `python`, and friends are out of scope by design).
 - Output is polled, not pushed; at the default interval a fast command may appear in one or two chunks.
-- Runs are grouped into one workbench tab rather than a panel per block. Without `dsh-better-sidebar` there is no output surface at all — the chips still execute and report status.
+- Every run's card lives in one fixed bottom-right dock; there is no per-block anchoring, so output never appears inside the transcript.
 - A run's output lives on the host for 10 minutes and survives a page refresh (run ids are kept in `sessionStorage`), but the host forgets it after that TTL or a DSH restart.
 - `input` (stdin) is implemented on the host but not yet surfaced in the UI.
 

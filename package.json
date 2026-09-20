@@ -1,7 +1,7 @@
 {
   "name": "dsh-run-button",
   "version": "0.1.0",
-  "description": "Run button for shell code blocks in DSH replies: executes the snippet through the host shell and shows its output in a bottom-panel tab per run, or inline under the block.",
+  "description": "Run button for shell code blocks in DSH replies: executes the snippet through the host shell service and streams its output to a bottom-right dock, or to a bottom-panel tab per run.",
   "license": "MIT",
   "type": "module",
   "main": "./lib/index.js",
