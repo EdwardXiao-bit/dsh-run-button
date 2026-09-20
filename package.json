@@ -1,7 +1,7 @@
 {
   "name": "dsh-run-button",
   "version": "0.1.0",
-  "description": "Run button for shell code blocks in DSH replies: executes the snippet through the host shell service and streams stdout/stderr into a panel under the block.",
+  "description": "Run button for shell code blocks in DSH replies: executes the snippet through the host shell service and streams stdout/stderr into a bottom-panel output tab.",
   "license": "MIT",
   "type": "module",
   "main": "./lib/index.js",
@@ -34,6 +34,7 @@
     "shell",
     "terminal",
     "command",
+    "bottom-panel",
     "web-ui",
     "plugin"
   ],
@@ -44,7 +45,8 @@
     "client": {
       "platform": "web",
       "inject": [
-        "@deepseek-ai/dsh-client-ui-conversation"
+        "@deepseek-ai/dsh-client-ui-conversation",
+        "dsh-better-sidebar"
       ]
     }
   },

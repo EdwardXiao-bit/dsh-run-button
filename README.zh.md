@@ -1,6 +1,6 @@
 # dsh-run-button
 
-**给 DSH 回答里的每一个命令行代码框加一个「运行」按钮。** 点一下就在宿主机上执行该命令，stdout/stderr 实时流到代码框下方的输出面板。
+**给 DSH 回答里的每一个命令行代码框加一个「运行」按钮。** 点一下就在宿主机上执行该命令，stdout/stderr 实时流进**底部工作台**的 **Run output** 标签页——就是终端所在的那个面板。
 
 > 状态：`0.1.0` —— 可工作的插件包，纯手写（无打包器、无 TypeScript 构建）。
 
@@ -13,10 +13,22 @@ DSH 把回答渲染成 Markdown，而代码框只提供一个操作：**复制**
 这个插件补上缺的那个动词。语言是命令行的代码框会在「复制」旁边多一个 **▶ 运行**：
 
 - 命令在**宿主机**上执行，用它所在会话自己的工作目录与沙箱；
-- stdout 与 stderr 流进代码框下方锚定的面板，边写边更新；
+- 输出落在底部工作台的 **Run output** 标签页里，本会话第一次运行时该面板会自动打开并展开——和终端同一个地方，所以不会盖住对话；
 - 按钮反映状态：`▶ 运行` → `■ 停止` → `✓ 运行`（退出码 0）/ `✕ 运行`（非 0 或被终止）；
-- 输入框上方的运行条列出进行中与最近的运行，滚动走或折叠掉的运行仍可找回；
-- 长时间运行的命令可以一键停止。
+- 输入框上方的运行条列出进行中与最近的运行，点任一条把工作台标签页提到前面；
+- 长时间运行的命令可以从按钮或标签页里停止。
+
+### 输出面板来自 dsh-better-sidebar
+
+底部面板标签页是通过 [`dsh-better-sidebar`](https://github.com/omdsh-dev/DSH-better-sidebar) 公开的 `ctx.betterSidebar` 服务注册的（`registerTab` + `openTab({ target: 'bottom' })`），与它内置的终端 / git / 任务标签页用的是同一个扩展点。
+
+该插件是**可选**依赖，不是必需：
+
+| 是否装了 `dsh-better-sidebar` | 行为 |
+| --- | --- |
+| 已装 | 运行会得到终端旁边一个真实的工作台标签页；本会话首次运行自动打开并展开面板 |
+| 未装 | 命令照旧通过宿主通道执行、按钮照旧反映状态——只是没有可渲染输出的面板 |
+
 
 ## 识别哪些代码框
 
@@ -71,7 +83,7 @@ npm install dsh-run-button
 
 1. 让 Agent 给一条命令，或自己写一个 `bash`/`powershell` 代码框。
 2. 点代码框标题栏里的 **▶ 运行**。
-3. 看代码框下方的输出面板。**stop** 终止、**collapse** 折叠、**close** 关闭。
+3. 底部工作台会切到 **Run output** 标签页（和终端同一个面板）。每个运行是一张卡片：运行中可 **stop**、**collapse** 折叠输出、**close** 丢弃该条；**Clear finished** 清掉所有已结束的运行。
 4. 点 **cwd 小标签**（运行按钮旁）可为该代码框指定工作目录；选择会在本会话内记住。
 
 ## 实现
@@ -89,12 +101,14 @@ dsh-run-button/
 
 **Host 半边**（`lib/index.js`）挂一条专用回环 RPC 通道 `/dsh-run-button`，端点 `info`、`start`、`output`、`input`、`kill`。`start` 解析会话的 cwd 与沙箱策略，然后用内置 `shell` 服务（`ctx.shell.resolve` → `ctx.shell.start`）启动命令并持有后台进程句柄。`output` 读取**增量** delta（`readOutput()` 不会重复吐已读内容），返回 JSON 安全的视图：状态、退出码、信号、cwd、沙箱模式与累积输出。所有副作用都是 `ctx.effect`，其中包含卸载时杀掉活动进程。
 
-**Client 半边**（`lib/client.js`）做两件事：
+**Client 半边**（`lib/client.js`）做三件事：
 
 1. `MutationObserver` 扫描会话区里的 `[data-code-block-banner]`，读出语言与 `<pre>` 文本，把运行按钮与 cwd 小标签**追加为 banner 动作行的尾部子节点** —— React 的 reconciler 从不枚举 DOM 子节点，因此尾部额外节点能在重渲染中存活。由于记录超过 100 条时列表会虚拟化，扫描在 mutation 与滚动时各跑一次。
-2. 运行存储通过 `connection.rpc.call` 每 180 ms 轮询 `output`，重绘每个运行的浮动面板（锚在对应代码框下方，`position: fixed`，React 完全不碰它），并把状态同步到按钮上。
+2. 运行存储通过 `connection.rpc.call` 每 180 ms 轮询 `output` 并通知订阅者；React 视图都从这一份存储渲染，所以按钮、输入框上方的运行条与工作台标签页三者始终一致。
+3. **Run output** 标签页通过 `ctx.betterSidebar.registerTab(...)` 注册，运行开始时用 `openTab({ target: 'bottom' })` 把它提到前面。标签页本体就是一个普通 React 组件，接收标准的 `TabComponentProps`。
 
-可选的运行条注册在会话 Slot `conversation.input.dock`。
+紧凑的运行条注册在会话 Slot `conversation.input.dock`。
+
 
 ### 没有构建步骤
 
@@ -130,7 +144,7 @@ window.__ModuleLoader__.load({
 
 - 只有命令行代码框可运行（`js`、`python` 等按设计不在范围内）。
 - 输出是轮询而非推送；默认间隔下极快的命令可能只出现一两个 chunk。
-- 面板锚在代码框下方；最多保留 4 个，超出的从最早的开始丢弃。
+- 所有运行收敛到一个工作台标签页，而不是每个代码框一个面板。没装 `dsh-better-sidebar` 时完全没有输出面板——按钮仍然执行并反映状态。
 - 运行输出在宿主机上保留 10 分钟，且能扛过页面刷新（run id 存在 `sessionStorage`），但超过 TTL 或 DSH 重启后宿主机就忘了。
 - `input`（stdin）在宿主端已实现，界面尚未暴露。
 

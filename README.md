@@ -1,6 +1,6 @@
 # dsh-run-button
 
-**A Run button for every shell code block in a DSH reply.** Press it and the snippet executes on the host, with stdout/stderr streaming live into a floating output panel attached to the block.
+**A Run button for every shell code block in a DSH reply.** Press it and the snippet executes on the host, with stdout/stderr streaming live into a **Run output** tab in the bottom workbench — the same panel that hosts the terminal.
 
 > Status: `0.1.0` — working plugin package, hand-authored (no bundler, no TypeScript build).
 
@@ -13,10 +13,22 @@ DSH renders assistant answers as Markdown, and a fenced code block gets exactly 
 This plugin adds the missing verb. Code blocks whose language is a command line get a **▶ Run** chip next to Copy. Click it and:
 
 - the command runs **on the host**, in the session's own workspace directory and sandbox;
-- stdout and stderr stream into a panel anchored under the block, updating as the process writes;
+- output lands in a **Run output** tab in the bottom workbench, which opens and expands on the first run of the session — the same place the terminal lives, so it does not cover the conversation;
 - the chip reflects state — `▶ Run` → `■ Stop` → `✓ Run` (exit 0) or `✕ Run` (non-zero / killed);
-- a run strip above the composer lists active and recent runs so a collapsed or scrolled-away run stays findable;
-- long-running commands can be stopped with a click.
+- a run strip above the composer lists active and recent runs, and clicking one brings the workbench tab forward;
+- long-running commands can be stopped from either the chip or the tab.
+
+### Output surface: dsh-better-sidebar
+
+The bottom-panel tab is provided through [`dsh-better-sidebar`](https://github.com/omdsh-dev/DSH-better-sidebar)'s public `ctx.betterSidebar` service (`registerTab` + `openTab({ target: 'bottom' })`), the same extension point its built-in terminal, git, and task tabs use.
+
+That plugin is an **optional** dependency, not a requirement:
+
+| `dsh-better-sidebar` | Behaviour |
+| --- | --- |
+| mounted | Runs get a real workbench tab next to the terminal; the panel opens and expands automatically on the session's first run |
+| absent | Commands still execute through the Host channel and the chips still report status — there is simply no output surface to render into |
+
 
 ## What it recognises
 
@@ -71,7 +83,7 @@ npm install dsh-run-button
 
 1. Ask the Agent for a command, or write one in a fenced `bash`/`powershell` block.
 2. Click **▶ Run** in the block's banner.
-3. Watch the output panel under the block. Press **stop** to kill it, **collapse** to shrink it, **close** to dismiss it.
+3. The bottom workbench opens on the **Run output** tab (same panel as the terminal). Each run is a card: **stop** while it is live, **collapse** to hide its output, **close** to drop it; **Clear finished** removes every settled run.
 4. Click the **cwd chip** (next to Run) to override the working directory for that block; the chosen directory is remembered for the session.
 
 ## How it works
@@ -89,12 +101,14 @@ dsh-run-button/
 
 **Host half** (`lib/index.js`) mounts a dedicated loopback RPC channel, `/dsh-run-button`, with endpoints `info`, `start`, `output`, `input`, `kill`. `start` resolves the session's cwd and sandbox policy, then uses the shipped `shell` service (`ctx.shell.resolve` → `ctx.shell.start`) to launch the command and hold a background process handle. `output` reads **incremental** deltas (`readOutput()` never repeats text) and returns a JSON-safe view: status, exit code, signal, cwd, sandbox mode, and the accumulated streams. Every side effect is a `ctx.effect`, including killing live processes on teardown.
 
-**Client half** (`lib/client.js`) does two things:
+**Client half** (`lib/client.js`) does three things:
 
-1. A `MutationObserver` scans the transcript for `[data-code-block-banner]`, reads the language and the `<pre>` text, and appends a Run chip plus a cwd chip into the banner's action row **as trailing children** — React's reconciler never enumerates DOM children, so an extra trailing node survives re-renders. Since the transcript virtualizes above 100 records, re-scans run on mutation and on scroll.
-2. A run store polls `output` every 180 ms over `connection.rpc.call`, re-renders each run's floating panel (positioned under its code block, `position: fixed` so React never touches it), and mirrors the state onto the chip.
+1. A `MutationObserver` scans the transcript for `[data-code-block-banner]`, reads the language and the `<pre>` text, and appends a Run chip plus a cwd chip into the banner's action row **as trailing children** — React's reconciler never enumerates DOM children, so an extra trailing node survives re-renders. Because the transcript virtualizes above 100 records, re-scans run on mutation and on scroll.
+2. A run store polls `output` every 180 ms over `connection.rpc.call` and notifies its subscribers; the React views render from that store, so the chip, the composer strip, and the workbench tab always agree.
+3. The **Run output** tab registers through `ctx.betterSidebar.registerTab(...)` and is raised with `openTab({ target: 'bottom' })` when a run starts. Its body is an ordinary React component receiving the standard `TabComponentProps`.
 
-The optional run strip registers in the session Slot `conversation.input.dock`.
+The compact run strip registers in the session Slot `conversation.input.dock`.
+
 
 ### No build step
 
@@ -130,7 +144,7 @@ None required. Behaviour that can be tuned:
 
 - Only command-line fences are runnable (`js`, `python`, and friends are out of scope by design).
 - Output is polled, not pushed; at the default interval a fast command may appear in one or two chunks.
-- Panels are positioned under their block; at most 4 are kept, oldest first dropped.
+- Runs are grouped into one workbench tab rather than a panel per block. Without `dsh-better-sidebar` there is no output surface at all — the chips still execute and report status.
 - A run's output lives on the host for 10 minutes and survives a page refresh (run ids are kept in `sessionStorage`), but the host forgets it after that TTL or a DSH restart.
 - `input` (stdin) is implemented on the host but not yet surfaced in the UI.
 
