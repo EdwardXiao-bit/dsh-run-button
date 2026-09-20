@@ -137,6 +137,8 @@ const registeredTabs = []
 const rpcCalls = []
 const openTabCalls = []
 const closeTabCalls = []
+/** runId -> the command that started it; the host echoes this back in view(). */
+const runCommands = new Map()
 let runCounter = 0
 let lastRunId = null
 
@@ -161,6 +163,7 @@ const connection = {
       if (endpoint === 'start') {
         runCounter += 1
         lastRunId = `run-${runCounter}`
+        runCommands.set(lastRunId, args.command)
         return Promise.resolve({
           ok: true,
           value: {
@@ -171,10 +174,11 @@ const connection = {
         })
       }
       if (endpoint === 'output') {
+        // The host echoes each run's OWN command, like lib/index.js view() does.
         return Promise.resolve({
           ok: true,
           value: {
-            runId: args.runId, command: 'echo hi', status: 'completed', exitCode: 0,
+            runId: args.runId, command: runCommands.get(args.runId) ?? '', status: 'completed', exitCode: 0,
             stdout: 'hello\n', stderr: '', cwd: 'C:\\Users\\Ed', sandboxMode: 'workspace-write',
             startedAt: Date.now(), finishedAt: Date.now(),
           },
@@ -368,19 +372,39 @@ const runIds = openTabCalls.map((seed) => (seed.meta && seed.meta.runId) || null
 if (runIds.some((runId) => typeof runId !== 'string')) fail('a tab was opened without a runId in its meta')
 if (new Set(runIds).size !== runIds.length) fail(`two tabs carry the same runId: ${JSON.stringify(runIds)}`)
 
-// Render each tab body the way the owner does, and require each to serve its own run.
-// The tab BODY is wrapped by dsh-better-sidebar's own NativeTabBody, so what this
-// harness can prove is the contract that wrapper relies on: distinct instance ids,
-// one distinct runId per tab, and no descriptor-level dedupe.
-const renderedByRun = new Map()
-for (const seed of openTabCalls) {
-  const runId = seed.meta && seed.meta.runId ? seed.meta.runId : null
-  if (runId === null) fail('a tab was opened without a runId in its meta')
-  renderedByRun.set(runId, true)
-}
+// Render each run's tab body THROUGH THE DESCRIPTOR the way the sidebar does.
+// React error #130 ("element type is invalid") is exactly what an undefined
+// component produces, so this both proves the descriptor is wired and checks
+// that each tab serves its own run and nobody else's.
 const commands = startCalls.map((call) => call.args.command)
 if (openTabCalls.length !== commands.length) {
   fail(`expected one tab per run: ${commands.length} runs but ${openTabCalls.length} tabs`)
+}
+for (let index = 0; index < openTabCalls.length; index += 1) {
+  const seed = openTabCalls[index]
+  const runId = seed.meta && seed.meta.runId ? seed.meta.runId : null
+  if (runId === null) fail('a tab was opened without a runId in its meta')
+  let tree
+  try {
+    tree = tabDescriptor.component({
+      ctx,
+      store: {},
+      scope: { sessionId: 'session-test' },
+      tab: { id: seed.id, type: seed.type, title: seed.title, meta: seed.meta },
+      visible: true,
+    })
+  } catch (error) {
+    fail(`the tab body threw for run ${runId} (a React #130-class fault if it were undefined): ${String(error)}`)
+  }
+  const text = textOf(tree)
+  const own = commands[index]
+  if (text.indexOf(own) < 0) {
+    fail(`the tab for ${runId} does not render its own command ${JSON.stringify(own)}; rendered ${JSON.stringify(text.slice(0, 200))}`)
+  }
+  for (const other of commands) {
+    if (other === own) continue
+    if (text.indexOf(other) >= 0) fail(`the tab for ${runId} leaked another run's command ${JSON.stringify(other)}`)
+  }
 }
 
 const errors = warnings.filter((line) => line.startsWith('ERROR'))
