@@ -1,7 +1,7 @@
 {
   "name": "dsh-run-button",
   "version": "0.1.0",
-  "description": "Adds a one-click Run button to shell code blocks in DSH replies, executing the snippet through the host shell with live streaming output.",
+  "description": "Run button for shell code blocks in DSH replies: executes the snippet through the host shell service and streams stdout/stderr into a panel under the block.",
   "license": "MIT",
   "type": "module",
   "main": "./lib/index.js",
@@ -12,10 +12,12 @@
     "./client": {
       "default": "./lib/client.js"
     },
+    "./cordis.patch.yml": "./cordis.patch.yml",
     "./package.json": "./package.json"
   },
   "files": [
     "lib/**/*.js",
+    "scripts/check-client.mjs",
     "cordis.patch.yml",
     "README.md",
     "README.zh.md",
@@ -24,12 +26,14 @@
   "keywords": [
     "dsh-plugin",
     "deepseek-harness",
+    "deepseek",
     "dsh",
     "cordis",
     "code-block",
     "run-button",
     "shell",
     "terminal",
+    "command",
     "web-ui",
     "plugin"
   ],
@@ -49,5 +53,8 @@
   },
   "engines": {
     "node": "^22.19.0 || >=24.0.0"
+  },
+  "scripts": {
+    "check": "node --check lib/index.js && node scripts/check-client.mjs"
   }
 }

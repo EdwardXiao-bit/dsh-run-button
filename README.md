@@ -137,3 +137,7 @@ None required. Behaviour that can be tuned:
 ## License
 
 MIT — see [LICENSE](LICENSE).
+
+## Prior art
+
+[dsh-smooth-stream](https://github.com/Laplace-bit/dsh-smooth-stream) also attaches to the code-block banner — for animated streaming and scroll control, not for executing the snippet. This plugin does not overlap with it: Smooth Stream changes how output is *revealed*, Run Button adds a control the transcript never had. The two coexist (both verified together in the same profile).
