@@ -1,0 +1,7 @@
+url: https://github.com/EdwardXiao-bit/dsh-run-button
+name: EdwardXiao-bit/dsh-run-button
+category: ui
+description:
+  en: Adds a Run button to shell code blocks in replies, executing the snippet through the host shell service and streaming output into a panel under the block.
+  zh: 为回答里的命令行代码框加「运行」按钮，通过宿主 shell 服务执行该命令，并把输出流到代码框下方的面板。
+tarball: https://github.com/EdwardXiao-bit/dsh-run-button/releases/latest/download/dsh-run-button.tgz
