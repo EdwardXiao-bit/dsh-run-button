@@ -3,6 +3,8 @@
 **给 DSH 回答里的每一个命令行代码框加一个「运行」按钮。** 点一下命令就在宿主机上执行，stdout/stderr 实时流进**右下角的浮动面板**（默认行为）。**不需要任何可选插件**：另有一个 `Panel` 模式可以把每个运行送进底部工作台标签页，而它才是唯一用到 [`dsh-better-sidebar`](https://github.com/omdsh-dev/DSH-better-sidebar) 的模式 —— 见[三种输出位置](#三种输出位置)。
 
 > 状态：`0.1.0` —— 可工作的插件包，纯手写（无打包器、无 TypeScript 构建）。
+>
+> **已在真实 DSH 上验证**（`0.1.5-rc.2`）：运行按钮能在会话自己的工作目录里执行命令、实时输出、并停止正在运行的进程。两种输出形态都端到端跑过 —— `Dock` 模式在右下角堆叠卡片；装了 `dsh-better-sidebar` 时 `Panel` 模式每个运行一个底部工作台标签页。
 
 <p align="center">
   <a href="README.md">English</a> · <b>中文</b>

@@ -3,6 +3,8 @@
 **A Run button for every shell code block in a DSH reply.** Press it and the snippet executes on the host, with stdout/stderr streaming live into a **floating dock at the bottom-right corner** (the default). No optional plugins are required: a `Panel` mode can instead route each run into a bottom-workbench tab, and it is the only mode that uses [`dsh-better-sidebar`](https://github.com/omdsh-dev/DSH-better-sidebar) — see [Output surfaces](#output-surfaces).
 
 > Status: `0.1.0` — working plugin package, hand-authored (no bundler, no TypeScript build).
+>
+> **Verified in a live DSH** (`0.1.5-rc.2`): the Run chip executes a command in the session's workspace, streams its output, and stops a running process. Both output surfaces were exercised end-to-end — `Dock` cards in the bottom-right stack, and one bottom-workbench tab per run with `dsh-better-sidebar` mounted.
 
 <p align="center">
   <b>English</b> · <a href="README.zh.md">中文</a>
