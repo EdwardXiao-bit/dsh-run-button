@@ -327,6 +327,14 @@ if (document.querySelector('[data-dsh-run-inline]') !== null) {
 // The tab type must be registered, and each open must carry its own run id.
 const tabDescriptor = registeredTabs.find((tab) => typeof tab.id === 'string' && tab.id.indexOf('dsh-run-button') === 0)
 if (tabDescriptor === undefined) fail('no run-output tab type was registered')
+// `component` is a required FIELD of the descriptor, never a second argument to
+// registerTab(descriptor) — passing it separately leaves the tab body undefined.
+if (typeof tabDescriptor.component !== 'function') {
+  fail('the tab descriptor has no component field, so the tab body would render nothing')
+}
+if (typeof tabDescriptor.title !== 'function' && typeof tabDescriptor.title !== 'string') {
+  fail('the tab descriptor has no title')
+}
 if (typeof tabDescriptor.dedupeKey === 'function' && tabDescriptor.dedupeKey({ id: 'x' }) !== undefined) {
   fail('the tab descriptor dedupes, so runs would share one tab instead of getting their own')
 }

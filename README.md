@@ -130,15 +130,29 @@ window.__ModuleLoader__.load({
 Run both gates before publishing:
 
 ```bash
-node scripts/check-client.mjs        # parse + materialize the factory (does not run apply)
-node scripts/check-client-apply.mjs  # stub DOM/ctx: two apply() passes, registerTab descriptor field-checked
+node scripts/check-client.mjs      # parse + materialize the factory; audits for undeclared globals
+node scripts/simulate-client.mjs   # mount it against a real DOM and drive the whole path
 ```
 
-The second one covers the inside of `apply()` with two passes: one where every service lookup misses (the degraded wiring), and one against a **contract-checking better-sidebar stub** — an undefined identifier, a string treated as an array, or a `registerTab` call missing `component` fails there with a non-zero exit instead of turning into a white screen or a crashed sidebar tab. Note that `apply()` may swallow the registration error itself, so the verdict comes from what the stub observed, not from whether `apply()` threw. Read [Host contracts](#host-contracts-read-before-touching-the-client-half) before touching the client half.
+`simulate-client.mjs` is the important one. It evaluates the bundle the way the shell does (`window.__ModuleLoader__`, then a Cordis-like `ctx`), mounts it over a [happy-dom](https://github.com/capricorn86/happy-dom) document, renders the real code-block markup, and then:
+
+- asserts the Run chip was injected into the banner and clicks it;
+- asserts `run/start` and `output` were actually called on the RPC channel;
+- switches output mode and asserts inline panels appear, then disappear;
+- asserts the tab type is registered, does **not** dedupe, and that two runs produce **two distinct tab ids each carrying its own `runId`** — the per-run pairing, which is the thing most likely to silently regress;
+- unmounts and asserts nothing was left behind.
+
+It exists because the earlier `check-client.mjs` only proved the bundle *parsed*. It did not run `apply()`, so an undeclared global (`styles`) sailed through and turned the whole page into "Failed to load plugins". Both bugs that shipped were caught by this harness **while it was being written** — which is the argument for keeping it.
 
 ## Host contracts (read before touching the client half)
 
 `lib/client.js` is hand-written plain JS with no type checking behind it: an invented API or a missing required field does not fail the build — it becomes a white screen or a crashed sidebar tab. These contracts are taken from the host's own definitions.
+
+### There are no ambient globals
+
+The **dynamic** Cordis plugin sandbox hands out `styles` and `harness` as builtins. A shipped package bundle gets **neither** — referencing one throws inside `apply()`, and a throwing `apply()` takes the whole composition down ("Failed to load plugins"), not just this plugin. Every browser global is therefore reached as `window.<name>`, and `check-client.mjs` fails the build if a bare one reappears.
+
+`apply()` is also wrapped in `try/catch`: on failure it reports, undoes whatever did mount, and returns, so this plugin can never be the reason the page stops rendering.
 
 ### Injecting CSS: there is no `styles` service
 
