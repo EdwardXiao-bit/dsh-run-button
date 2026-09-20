@@ -422,6 +422,30 @@ for (let index = 0; index < openTabCalls.length; index += 1) {
   }
 }
 
+/* ------------------------------------------------------------------ *
+ * Chip dismissal: each run chip drops its own run
+ * ------------------------------------------------------------------ */
+
+// Switch back to dock mode so a run has a visible card to clean up.
+const dockToggle = findElement(renderStrip().tree, (node) => typeof node.props?.title === 'string' && node.props.title.indexOf('bottom-right corner') >= 0)
+if (dockToggle === null) fail('the Dock mode toggle was not rendered')
+dockToggle.props.onClick()
+await new Promise((resolve) => setTimeout(resolve, 200))
+
+const dismissTree = renderStrip().tree
+const chipClose = findElement(dismissTree, (node) => typeof node.props?.className === 'string' && node.props.className.indexOf('-chipClose') >= 0)
+if (chipClose === null) fail('run chips have no dismiss button')
+if (typeof chipClose.props.onClick !== 'function') fail('the chip dismiss button has no handler')
+
+const cardsBefore = document.querySelectorAll('[data-dsh-run-inline]').length
+if (cardsBefore === 0) fail('dock mode rendered no cards to dismiss')
+chipClose.props.onClick()
+await new Promise((resolve) => setTimeout(resolve, 250))
+const cardsAfter = document.querySelectorAll('[data-dsh-run-inline]').length
+if (cardsAfter >= cardsBefore) {
+  fail(`dismissing a chip did not drop its run (${cardsBefore} cards -> ${cardsAfter})`)
+}
+
 const errors = warnings.filter((line) => line.startsWith('ERROR'))
 if (errors.length > 0) fail(`the client half logged errors:\n  ${errors.join('\n  ')}`)
 
