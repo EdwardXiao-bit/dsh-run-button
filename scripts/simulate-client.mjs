@@ -307,9 +307,21 @@ await new Promise((resolve) => setTimeout(resolve, 400))
 const startCall = rpcCalls.find((call) => call.endpoint === 'start')
 if (startCall === undefined) fail('clicking the Run chip never called run/start')
 if (document.querySelector('[data-dsh-run-inline]') === null) {
-  fail('inline mode rendered no output panel')
+  fail('dock mode rendered no output card')
 }
-if (openTabCalls.length !== 0) fail('inline mode opened a workbench tab')
+// The dock lives in exactly ONE container with exactly ONE card per run. The
+// old anchored placement could put a card under the block and a second one in
+// the corner when the anchor scrolled out of the virtualized transcript.
+const dockRoots = document.querySelectorAll('.dsh-runbtn-dock')
+if (dockRoots.length !== 1) fail(`expected exactly 1 dock container, found ${dockRoots.length}`)
+const cardsForOneRun = dockRoots[0].querySelectorAll('[data-dsh-run-inline]')
+if (cardsForOneRun.length !== 1) fail(`expected 1 card for the first run, found ${cardsForOneRun.length}`)
+if (openTabCalls.length !== 0) fail('dock mode opened a workbench tab')
+// A card must not float by itself outside the dock.
+const orphanCards = [...document.querySelectorAll('[data-dsh-run-inline]')].filter(
+  (card) => card.parentElement === null || !card.parentElement.classList.contains('dsh-runbtn-dock'),
+)
+if (orphanCards.length > 0) fail(`${orphanCards.length} output card(s) render outside the dock container`)
 
 /* ------------------------------------------------------------------ *
  * Panel mode: one tab per run, each carrying its own run id
@@ -325,7 +337,10 @@ await new Promise((resolve) => setTimeout(resolve, 200))
 
 if (openTabCalls.length === 0) fail('switching to panel mode opened no tab')
 if (document.querySelector('[data-dsh-run-inline]') !== null) {
-  fail('switching to panel mode left inline panels behind')
+  fail('switching to panel mode left dock cards behind')
+}
+if (document.querySelector('.dsh-runbtn-dock') !== null) {
+  fail('switching to panel mode left the dock container behind')
 }
 
 // The tab type must be registered, and each open must carry its own run id.
