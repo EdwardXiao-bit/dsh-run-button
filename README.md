@@ -4,6 +4,10 @@
 
 > Status: `0.1.0` — working plugin package, hand-authored (no bundler, no TypeScript build).
 
+<p align="center">
+  <b>English</b> · <a href="README.zh.md">中文</a>
+</p>
+
 ---
 
 ## Why
@@ -86,8 +90,9 @@ npm install dsh-run-button
 
 1. Ask the Agent for a command, or write one in a fenced `bash`/`powershell` block.
 2. Click **▶ Run** in the block's banner.
-3. The bottom workbench opens on the **Run output** tab (same panel as the terminal). Each run is a card: **stop** while it is live, **collapse** to hide its output, **close** to drop it; **Clear finished** removes every settled run.
-4. Click the **cwd chip** (next to Run) to override the working directory for that block; the chosen directory is remembered for the session.
+3. Output appears in the **bottom-right dock** (the default mode). Each run is a card: **stop** while it is live, **collapse** to hide its output, **close** to drop it.
+4. Switch where output goes with **Dock / Panel / Off** at the right of the run strip; `Panel` instead gives each run its own bottom-workbench tab, with **Stop**, **Copy**, and **Close**.
+5. Click the **cwd chip** (next to Run) to override the working directory for that block; the chosen directory is remembered for the session.
 
 ## How it works
 
@@ -99,8 +104,8 @@ dsh-run-button/
 ├── cordis.patch.yml      profile row: - insert: [{id: run-button, name: dsh-run-button}]
 ├── lib/index.js          HOST  — ESM Cordis plugin
 ├── lib/client.js         CLIENT — classic-script bundle (window.__ModuleLoader__)
-├── scripts/check-client.mjs       syntax gate for the browser bundle
-└── scripts/check-client-apply.mjs runs apply() twice (degraded + stubbed host) and checks descriptor fields
+├── scripts/check-client.mjs       parse gate + undeclared-global audit
+└── scripts/simulate-client.mjs    mounts against a real DOM and drives the whole path
 ```
 
 **Host half** (`lib/index.js`) mounts a dedicated loopback RPC channel, `/dsh-run-button`, with endpoints `info`, `start`, `output`, `input`, `kill`. `start` resolves the session's cwd and sandbox policy, then uses the shipped `shell` service (`ctx.shell.resolve` → `ctx.shell.start`) to launch the command and hold a background process handle. `output` reads **incremental** deltas (`readOutput()` never repeats text) and returns a JSON-safe view: status, exit code, signal, cwd, sandbox mode, and the accumulated streams. Every side effect is a `ctx.effect`, including killing live processes on teardown.

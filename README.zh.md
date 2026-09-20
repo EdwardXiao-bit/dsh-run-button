@@ -1,8 +1,12 @@
 # dsh-run-button
 
-**给 DSH 回答里的每一个命令行代码框加一个「运行」按钮。** 点一下就在宿主机上执行该命令，stdout/stderr 实时流进**底部工作台**的 **Run output** 标签页——就是终端所在的那个面板。
+**给 DSH 回答里的每一个命令行代码框加一个「运行」按钮。** 点一下命令就在宿主机上执行，stdout/stderr 实时流进**右下角的浮动面板**，或每个运行一个**底部面板标签页**。
 
 > 状态：`0.1.0` —— 可工作的插件包，纯手写（无打包器、无 TypeScript 构建）。
+
+<p align="center">
+  <a href="README.md">English</a> · <b>中文</b>
+</p>
 
 ---
 
@@ -10,25 +14,27 @@
 
 DSH 把回答渲染成 Markdown，而代码框只提供一个操作：**复制**。每次回答里出现想试的命令（一段 `git`、一个 `pnpm` 脚本、一条诊断命令），你都得复制 → 切终端 → 粘贴 → 回车。
 
-这个插件补上缺的那个动词。语言是命令行的代码框会在「复制」旁边多一个 **▶ 运行**：
+这个插件补上缺的那个动词。语言是命令行的代码框会在「复制」旁边多一个 **▶ 运行**。点它之后：
 
 - 命令在**宿主机**上执行，用它所在会话自己的工作目录与沙箱；
-- 输出落在底部工作台的 **Run output** 标签页里，本会话第一次运行时该面板会自动打开并展开——和终端同一个地方，所以不会盖住对话；
+- 输出流进**右下角的浮动面板（dock）** —— 每个运行一张卡片，最新的在最上面，始终不覆盖对话区；
 - 按钮反映状态：`▶ 运行` → `■ 停止` → `✓ 运行`（退出码 0）/ `✕ 运行`（非 0 或被终止）；
-- 输入框上方的运行条列出进行中与最近的运行，点任一条把工作台标签页提到前面；
-- 长时间运行的命令可以从按钮或标签页里停止。
+- 输入框上方的运行条列出进行中与最近的运行：点 chip 重新展开该运行的卡片，点它的 `×` 丢弃该运行；
+- 长时间运行的命令可以从按钮、浮动卡片或底部标签页里停止。
 
-### 输出面板来自 dsh-better-sidebar
+### 三种输出位置
 
-底部面板标签页是通过 [`dsh-better-sidebar`](https://github.com/omdsh-dev/DSH-better-sidebar) 公开的 `ctx.betterSidebar` 服务注册的（`registerTab` + `openTab({ target: 'bottom' })`），与它内置的终端 / git / 任务标签页用的是同一个扩展点。
+三种模式，可在运行条上切换（`Dock` / `Panel` / `Off`），选择会被记住：
 
-该插件是**可选**依赖，不是必需：
+| 模式 | 输出去哪 | 需要额外装东西吗 |
+| --- | --- | --- |
+| **Dock**（默认） | 右下角固定堆叠，每个运行一张浮动卡片 | 不需要 |
+| **Panel** | 每个运行一个底部工作台标签页 —— 就是终端所在的那个面板 | [`dsh-better-sidebar`](https://github.com/omdsh-dev/DSH-better-sidebar) |
+| **Off** | 不渲染输出；按钮仍反映状态 | 不需要 |
 
-| 是否装了 `dsh-better-sidebar` | 行为 |
-| --- | --- |
-| 已装 | 运行会得到终端旁边一个真实的工作台标签页；本会话首次运行自动打开并展开面板 |
-| 未装 | 命令照旧通过宿主通道执行、按钮照旧反映状态——只是没有可渲染输出的面板 |
+`Panel` 是通过 `dsh-better-sidebar` 公开的 `ctx.betterSidebar` 服务提供的（`registerTab` + `openTab({ target: 'bottom' })`），与它内置的终端 / git / 任务标签页用的是同一个扩展点。该插件是**可选**依赖：没装时 `Panel` 会被置灰，`Dock` 仍是默认，所以这个插件不依赖任何额外东西就能完整使用。
 
+卡片**刻意不锚定**在发起它的代码框上。锚定看起来更整齐，直到该代码框滚出虚拟化列表、锚点查不到，同一个运行就会**同时出现在两处**。固定的右下角面板没有这种失效模式。
 
 ## 识别哪些代码框
 
@@ -83,8 +89,9 @@ npm install dsh-run-button
 
 1. 让 Agent 给一条命令，或自己写一个 `bash`/`powershell` 代码框。
 2. 点代码框标题栏里的 **▶ 运行**。
-3. 底部工作台会切到 **Run output** 标签页（和终端同一个面板）。每个运行是一张卡片：运行中可 **stop**、**collapse** 折叠输出、**close** 丢弃该条；**Clear finished** 清掉所有已结束的运行。
-4. 点 **cwd 小标签**（运行按钮旁）可为该代码框指定工作目录；选择会在本会话内记住。
+3. 输出出现在**右下角的浮动面板**里（默认 Dock 模式）。每个运行一张卡片：运行中可 **stop**、**collapse** 折叠输出、**close** 丢弃该条。
+4. 想改输出位置就点运行条右侧的 **Dock / Panel / Off**；切到 `Panel` 时改为每个运行一个底部工作台标签页（那个标签页有 **Stop**、**Copy**、**Close** 和一个 **Clear finished** 式的列表）。
+5. 点 **cwd 小标签**（运行按钮旁）可为该代码框指定工作目录；选择会在本会话内记住。
 
 ## 实现
 
@@ -96,8 +103,8 @@ dsh-run-button/
 ├── cordis.patch.yml      profile 行：- insert: [{id: run-button, name: dsh-run-button}]
 ├── lib/index.js          HOST  — ESM Cordis 插件
 ├── lib/client.js         CLIENT — 经典脚本 bundle（window.__ModuleLoader__）
-├── scripts/check-client.mjs       浏览器 bundle 的语法闸门（解析 + 物化）
-└── scripts/check-client-apply.mjs 两次 apply()（降级 + 桩宿主）并校验描述符必填字段
+├── scripts/check-client.mjs      浏览器 bundle 的解析闸门 + 未声明全局审计
+└── scripts/simulate-client.mjs   在真实 DOM 上挂载并走完整链路
 ```
 
 **Host 半边**（`lib/index.js`）挂一条专用回环 RPC 通道 `/dsh-run-button`，端点 `info`、`start`、`output`、`input`、`kill`。`start` 解析会话的 cwd 与沙箱策略，然后用内置 `shell` 服务（`ctx.shell.resolve` → `ctx.shell.start`）启动命令并持有后台进程句柄。`output` 读取**增量** delta（`readOutput()` 不会重复吐已读内容），返回 JSON 安全的视图：状态、退出码、信号、cwd、沙箱模式与累积输出。所有副作用都是 `ctx.effect`，其中包含卸载时杀掉活动进程。
@@ -105,11 +112,10 @@ dsh-run-button/
 **Client 半边**（`lib/client.js`）做三件事：
 
 1. `MutationObserver` 扫描会话区里的 `[data-code-block-banner]`，读出语言与 `<pre>` 文本，把运行按钮与 cwd 小标签**追加为 banner 动作行的尾部子节点** —— React 的 reconciler 从不枚举 DOM 子节点，因此尾部额外节点能在重渲染中存活。由于记录超过 100 条时列表会虚拟化，扫描在 mutation 与滚动时各跑一次。
-2. 运行存储通过 `connection.rpc.call` 每 180 ms 轮询 `output` 并通知订阅者；React 视图都从这一份存储渲染，所以按钮、输入框上方的运行条与工作台标签页三者始终一致。
-3. **Run output** 标签页通过 `ctx.betterSidebar.registerTab(...)` 注册，运行开始时用 `openTab({ target: 'bottom' })` 把它提到前面。标签页本体就是一个普通 React 组件，接收标准的 `TabComponentProps`。
+2. 运行存储通过 `connection.rpc.call` 每 180 ms 轮询 `output` 并通知订阅者；React 视图都从这一份存储渲染，所以按钮、运行条与输出面板三者始终一致。
+3. 右下角 dock 是一个固定容器，每个运行一张卡片；`Panel` 模式下改为通过 `ctx.betterSidebar.registerTab(...)` 注册 per-run 标签页，并用 `openTab({ target: 'bottom' })` 打开。标签页本体就是一个普通 React 组件，接收标准的 `TabComponentProps`。
 
-紧凑的运行条注册在会话 Slot `conversation.input.dock`。
-
+运行条注册在会话 Slot `conversation.input.dock`。
 
 ### 没有构建步骤
 
@@ -130,15 +136,29 @@ window.__ModuleLoader__.load({
 发布前跑这两条闸门：
 
 ```bash
-node scripts/check-client.mjs        # 解析 + 物化 factory（不执行 apply）
-node scripts/check-client-apply.mjs  # 打桩 DOM/ctx：跑两次 apply()，并逐字段校验 registerTab 描述符
+node scripts/check-client.mjs      # 解析 + 物化 factory；并审计未声明的环境全局
+node scripts/simulate-client.mjs   # 在真实 DOM 上挂载，走完整链路
 ```
 
-第二条覆盖 `apply()` 内部，跑两遍：一遍所有服务都拿不到（降级路径），一遍给一个**校验契约的 better-sidebar 桩**（未定义标识符、把字符串当数组、往 `registerTab` 漏传 `component` 都会在这里失败并以非 0 退出码结束），而不是变成白屏或崩掉的侧栏标签页。注意 `apply()` 可能自己吞掉注册异常 —— 所以判定依据是桩观察到了什么，不是有没有抛错。动 client 半边之前请先读[宿主契约](#宿主契约写-client-半边前必读)。
+`simulate-client.mjs` 是关键那条。它像 shell 一样求值 bundle（`window.__ModuleLoader__`，再给一个类 Cordis 的 `ctx`），在 [happy-dom](https://github.com/capricorn86/happy-dom) 文档上挂载，渲染真实的代码框标记，然后断言：
+
+- 运行按钮确实被注入进 banner，并被点击；
+- `run/start` 与 `output` 确实在 RPC 通道上被调用；
+- 切换输出模式后 dock 卡片出现又消失，且**只有一个 dock 容器、每个运行恰好一张卡**；
+- 标签类型已注册、**不去重**，两次运行产生**两个不同标签 id 且各自携带自己的 `runId`** —— per-run 配对是最容易悄悄退化的地方；
+- 卸载后没有留下任何残留。
+
+它之所以存在：早先的 `check-client.mjs` 只证明 bundle **能解析**，不跑 `apply()`，于是未声明的全局变量（`styles`）顺利通过，把整页变成 "Failed to load plugins"。那两个上线的 bug **都是这个 harness 在编写过程中自己抓出来的** —— 这就是保留它的理由。
 
 ## 宿主契约（写 client 半边前必读）
 
 `lib/client.js` 是手写纯 JS，没有类型检查兜底：臆造 API、漏填必填字段都不会在构建期报错，只会变成整页白屏或崩掉的侧栏标签页。以下契约摘自宿主的实际定义。
+
+### 没有环境全局
+
+**动态** Cordis 插件沙箱会给出 `styles` 与 `harness` 这两个 builtin。而一个真正发布的包 bundle **两个都没有** —— 引用其中一个就会在 `apply()` 里抛错，而抛错的 `apply()` 会把整个 composition 拖垮（"Failed to load plugins"），不只是这个插件。因此每个浏览器全局都通过 `window.<name>` 访问，并且 `check-client.mjs` 会在裸引用再次出现时让构建失败。
+
+`apply()` 同时包在 `try/catch` 里：失败时会报告、回滚已挂载部分并返回，所以这个插件永远不可能是页面停止渲染的原因。
 
 ### 注入 CSS：内核没有 `styles` 服务
 
@@ -149,13 +169,6 @@ var tag = document.createElement("style");
 tag.id = PREFIX + "-styles";
 tag.textContent = CSS;          // 本项目的 CSS 是字符串（数组 .join("") 得到），不是数组
 document.head.appendChild(tag);
-
-ctx.effect(function () {
-  return function () {
-    var existing = document.getElementById(PREFIX + "-styles");
-    if (existing !== null) existing.remove();
-  };
-}, "dsh-run-button: css teardown");
 ```
 
 ### `ctx.betterSidebar.registerTab()`：`component` 是必填
@@ -178,7 +191,7 @@ ctx.effect(function () {
 | `settings` / `badge` | | 设置页开关 / 标签页角标 |
 | `onOpen` / `onActivate` / `onClose` | | 生命周期回调 |
 
-`component` 收到的 `TabComponentProps`：`ctx`、`store`、`scope`、`tab`、`visible`（是否活动且面板展开 —— 不 live 时应暂停轮询）。
+`component` 收到的 `TabComponentProps`：`ctx`、`store`、`scope`、`tab`、`visible`（是否活动**且**面板展开 —— 不 live 时应暂停轮询）。
 
 函数声明会提升，所以 `component: RunTab` 可以写在 `function RunTab()` 之前。
 
@@ -202,10 +215,14 @@ ctx.effect(function () {
 
 - 只有命令行代码框可运行（`js`、`python` 等按设计不在范围内）。
 - 输出是轮询而非推送；默认间隔下极快的命令可能只出现一两个 chunk。
-- 所有运行收敛到一个工作台标签页，而不是每个代码框一个面板。没装 `dsh-better-sidebar` 时完全没有输出面板——按钮仍然执行并反映状态。
+- 每个运行的卡片都落在同一个固定的右下角 dock 里；没有按代码框锚定，所以输出永远不会出现在会话区内部。
 - 运行输出在宿主机上保留 10 分钟，且能扛过页面刷新（run id 存在 `sessionStorage`），但超过 TTL 或 DSH 重启后宿主机就忘了。
 - `input`（stdin）在宿主端已实现，界面尚未暴露。
 
 ## 许可证
 
 MIT —— 见 [LICENSE](LICENSE)。
+
+## 相关项目
+
+[dsh-smooth-stream](https://github.com/Laplace-bit/dsh-smooth-stream) 同样会接入代码块 banner —— 但它是为了流式动画与滚动控制，不是为了执行代码。两者不重叠：Smooth Stream 改变输出**如何呈现**，Run Button 增加的是会话区本来没有的操作入口。两者可以共存（已在同一个 profile 里一起验证过）。
