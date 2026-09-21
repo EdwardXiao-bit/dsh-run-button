@@ -211,24 +211,47 @@ const services = {
   betterSidebar,
 }
 
-const ctx = {
-  get(name) {
-    return Object.prototype.hasOwnProperty.call(services, name) ? services[name] : undefined
-  },
-  effect(callback) {
-    const disposer = callback()
-    if (typeof disposer === 'function') disposers.push(disposer)
-    return () => {}
-  },
-  on() { return () => {} },
-  // Mirrors the timer service: returns a disposer that clears the interval.
-  interval(fn, ms) {
-    const handle = setInterval(fn, ms)
-    const dispose = () => clearInterval(handle)
-    disposers.push(dispose)
-    return dispose
-  },
+/**
+ * Build a Cordis-like ctx.
+ *
+ * The real `ctx.interval` is a timer-service MIXIN: it exists only when the
+ * plugin declares `timer` in its inject list, and cordis throws
+ * 'cannot get property "interval" without inject' otherwise. An always-present
+ * stub hid exactly that bug once, so `withTimer` is opt-in and the guard below
+ * reproduces the real failure mode.
+ */
+function makeCtx({ withTimer = false, disposerSink = null, serviceTable = services } = {}) {
+  const sink = disposerSink ?? []
+  const ctx = {
+    get(name) {
+      return Object.prototype.hasOwnProperty.call(serviceTable, name) ? serviceTable[name] : undefined
+    },
+    effect(callback) {
+      const disposer = callback()
+      if (typeof disposer === 'function') sink.push(disposer)
+      return () => {}
+    },
+    on() { return () => {} },
+    // Absent unless the timer service is bound, exactly like the real mixin.
+    interval: withTimer
+      ? (fn, ms) => {
+        const handle = setInterval(fn, ms)
+        const dispose = () => clearInterval(handle)
+        sink.push(dispose)
+        return dispose
+      }
+      : undefined,
+  }
+  for (const key of Object.keys(ctx)) {
+    if (ctx[key] === undefined) delete ctx[key]
+  }
+  return ctx
 }
+
+const ctx = makeCtx({
+  withTimer: true,
+  disposerSink: disposers,
+})
 
 /* ------------------------------------------------------------------ *
  * Mount, exercise, unmount
@@ -525,25 +548,9 @@ if (document.querySelector('[data-dsh-run-button]') !== null) fail('teardown lef
   // was already reversed during its teardown.
   const lateDisposers = []
   const lateIntervals = new Set()
-  const lateCtx = {
-    get: (name) => (Object.prototype.hasOwnProperty.call(lateServices, name) ? lateServices[name] : undefined),
-    effect(callback) {
-      const disposer = callback()
-      if (typeof disposer === 'function') lateDisposers.push(disposer)
-      return () => {}
-    },
-    on: () => () => {},
-    interval: (fn, ms) => {
-      const handle = setInterval(fn, ms)
-      lateIntervals.add(handle)
-      const dispose = () => {
-        clearInterval(handle)
-        lateIntervals.delete(handle)
-      }
-      lateDisposers.push(dispose)
-      return dispose
-    },
-  }
+
+  const lateExport = registered[0].factory((specifier) => moduleTable[specifier])
+  const declaresTimer = Array.isArray(lateExport.inject) && lateExport.inject.indexOf('timer') >= 0
 
   const lateRegistrations = []
   const lateSlots = {
@@ -559,7 +566,37 @@ if (document.querySelector('[data-dsh-run-button]') !== null) fail('teardown lef
   }
   lateServices.slots = lateSlots
 
-  const lateExport = registered[0].factory((specifier) => moduleTable[specifier])
+  const lateCtx = {
+    get: (name) => (Object.prototype.hasOwnProperty.call(lateServices, name) ? lateServices[name] : undefined),
+    effect(callback) {
+      const disposer = callback()
+      if (typeof disposer === 'function') lateDisposers.push(disposer)
+      return () => {}
+    },
+    on: () => () => {},
+    // Present ONLY if the bundle declares `timer`, mirroring the real mixin.
+    // Without this, an undeclared ctx.interval() silently passes here and fails
+    // in the browser with 'cannot get property "interval" without inject'.
+    interval: declaresTimer
+      ? (fn, ms) => {
+        const handle = setInterval(fn, ms)
+        lateIntervals.add(handle)
+        const dispose = () => {
+          clearInterval(handle)
+          lateIntervals.delete(handle)
+        }
+        lateDisposers.push(dispose)
+        return dispose
+      }
+      : undefined,
+  }
+  if (lateCtx.interval === undefined) delete lateCtx.interval
+
+  const usesCtxInterval = /ctx\.interval\s*\(/.test(readFileSync(new URL('lib/client.js', root), 'utf8'))
+  if (usesCtxInterval && !declaresTimer) {
+    fail('the client half calls ctx.interval() but does not declare "timer" in inject — this is exactly the browser error it caused')
+  }
+
   try {
     lateExport.apply(lateCtx)
   } catch (error) {
