@@ -221,6 +221,13 @@ const ctx = {
     return () => {}
   },
   on() { return () => {} },
+  // Mirrors the timer service: returns a disposer that clears the interval.
+  interval(fn, ms) {
+    const handle = setInterval(fn, ms)
+    const dispose = () => clearInterval(handle)
+    disposers.push(dispose)
+    return dispose
+  },
 }
 
 /* ------------------------------------------------------------------ *
@@ -457,6 +464,88 @@ try {
 }
 
 if (document.querySelector('[data-dsh-run-button]') !== null) fail('teardown left a Run chip behind')
+
+/* ------------------------------------------------------------------ *
+ * Regression: dsh-better-sidebar arriving AFTER this half mounts
+ *
+ * This actually shipped. `dsh-better-sidebar` was dropped from
+ * dsh.client.inject, `inject` is not load ordering (only `external` orders
+ * rows), this bundle materialized first, `ctx.get("betterSidebar")` was
+ * undefined at bind time, Panel was greyed out for the whole session.
+ * ------------------------------------------------------------------ */
+
+{
+  const lateServices = { slots, connection } // no betterSidebar yet
+  // This mount's own disposers; the outer list belongs to the first mount and
+  // was already reversed during its teardown.
+  const lateDisposers = []
+  const lateIntervals = new Set()
+  const lateCtx = {
+    get: (name) => (Object.prototype.hasOwnProperty.call(lateServices, name) ? lateServices[name] : undefined),
+    effect(callback) {
+      const disposer = callback()
+      if (typeof disposer === 'function') lateDisposers.push(disposer)
+      return () => {}
+    },
+    on: () => () => {},
+    interval: (fn, ms) => {
+      const handle = setInterval(fn, ms)
+      lateIntervals.add(handle)
+      const dispose = () => {
+        clearInterval(handle)
+        lateIntervals.delete(handle)
+      }
+      lateDisposers.push(dispose)
+      return dispose
+    },
+  }
+
+  const lateRegistrations = []
+  const lateSlots = {
+    inject: (_n, cb) => {
+      const disposer = cb()
+      if (typeof disposer === 'function') lateDisposers.push(disposer)
+      return () => {}
+    },
+    register: (options, component) => {
+      lateRegistrations.push({ options, component })
+      return () => {}
+    },
+  }
+  lateServices.slots = lateSlots
+
+  const lateExport = registered[0].factory((specifier) => moduleTable[specifier])
+  try {
+    lateExport.apply(lateCtx)
+  } catch (error) {
+    fail(`apply() threw with no sidebar present: ${String(error)}`)
+  }
+  if (lateRegistrations.length === 0) fail('the run strip was not registered without a sidebar')
+
+  // The sidebar mounts a moment later, after apply() has already run.
+  const tabsBeforeLateBind = registeredTabs.length
+  lateServices.betterSidebar = betterSidebar
+  await new Promise((resolve) => setTimeout(resolve, 1400))
+
+  const addedTabs = registeredTabs.slice(tabsBeforeLateBind)
+  const boundLate = addedTabs.some((tab) => typeof tab.id === 'string' && tab.id.indexOf('dsh-run-button') === 0)
+  if (!boundLate) {
+    fail('a late-arriving dsh-better-sidebar was never bound, so Panel would stay disabled for the session')
+  }
+  if (addedTabs.length !== 1) {
+    fail(`the late bind registered ${addedTabs.length} tab types, expected exactly 1`)
+  }
+
+  // Unwind this mount so no retry interval keeps the process alive.
+  for (const dispose of lateDisposers.reverse()) {
+    try {
+      dispose()
+    } catch (error) {
+      fail(`late-mount teardown threw: ${String(error)}`)
+    }
+  }
+  for (const handle of lateIntervals) clearInterval(handle)
+}
 
 console.log('OK  client half mounts, injects, starts runs, renders per-run tabs, and unmounts')
 console.log(`    rpc endpoints exercised: ${[...new Set(rpcCalls.map((call) => call.endpoint))].join(', ')}`)
