@@ -4,6 +4,10 @@
   "description": "Run button for shell code blocks in DSH replies: executes the snippet through the host shell service and streams its output to a bottom-right dock, or to a bottom-panel tab per run.",
   "license": "MIT",
   "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/EdwardXiao-bit/dsh-run-button.git"
+  },
   "main": "./lib/index.js",
   "exports": {
     ".": {
