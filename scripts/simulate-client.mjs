@@ -234,6 +234,23 @@ const ctx = {
  * Mount, exercise, unmount
  * ------------------------------------------------------------------ */
 
+/**
+ * Every HARD service dependency, mapped from the property the bundle actually
+ * touches to the name it must declare in `inject`.
+ *
+ * The mapping matters: the timer mixin is reached as `ctx.interval()` /
+ * `ctx.timeout()`, NOT `ctx.timer`, so a naive check for `ctx.timer` misses the
+ * real fault. That exact gap let an undeclared `timer` ship and abort apply(),
+ * killing the Run button while every other gate stayed green.
+ */
+const HARD_DEPS = [
+  { service: 'slots', pattern: /ctx\.slots\b/ },
+  { service: 'connection', pattern: /ctx\.connection\b/ },
+  { service: 'timer', pattern: /ctx\.(interval|timeout|throttle|debounce)\s*\(/ },
+]
+/** Globals that exist only in the dynamic-plugin sandbox, never in a bundle. */
+const AMBIENT_ONLY = [/[^.\w$]styles\s*\./, /[^.\w$]harness\s*\./]
+
 function fail(message) {
   console.error(`FAIL: ${message}`)
   process.exit(1)
@@ -270,6 +287,34 @@ const exported = entry.factory((specifier) => {
 
 if (typeof exported.apply !== 'function') fail('bundle exports no apply()')
 if (!Array.isArray(exported.inject) || exported.inject.indexOf('slots') < 0) fail('bundle does not inject slots')
+
+// Every HARD service dependency must be declared in `inject`, or cordis aborts
+// apply() with 'cannot get property "x" without inject' and the plugin
+// contributes nothing at all.
+//
+// `ctx.get("name")` is the optional read and needs no declaration — that is how
+// the optional dsh-better-sidebar peer is fetched, so it is deliberately not in
+// HARD_DEPS.
+{
+  const declared = Array.isArray(exported.inject) ? exported.inject : []
+  const source = readFileSync(new URL('lib/client.js', root), 'utf8')
+  const problems = []
+
+  for (const dep of HARD_DEPS) {
+    if (dep.pattern.test(source) && !declared.includes(dep.service)) {
+      problems.push(`${dep.service}: reached via ctx.* but missing from inject`)
+    }
+  }
+  for (const pattern of AMBIENT_ONLY) {
+    if (pattern.test(source)) {
+      problems.push(`${pattern}: ambient-sandbox-only global, has no client provider`)
+    }
+  }
+
+  if (problems.length > 0) {
+    fail(`undeclared hard service dependency, which aborts apply() at runtime:\n      ${problems.join('\n      ')}\n      exports.inject = ${JSON.stringify(declared)}`)
+  }
+}
 
 try {
   exported.apply(ctx)
