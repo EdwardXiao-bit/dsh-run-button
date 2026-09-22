@@ -64,25 +64,35 @@ This is a **user-initiated** execution surface, and it is deliberately not more 
 
 ## Install
 
-This plugin is listed in the DSH community registry, so the shortest path is the market. It is also installable with the `dsh` CLI, or from source.
+This plugin is published on npm and listed in the DSH community registry, so there are four ways in. The first two are what most people want.
 
-### From the plugin market (easiest)
+### From the plugin market (easiest, no terminal)
 
-**Settings → Plugin Market → search `dsh-run-button` → Install.** No build step: the registry points at a prebuilt tarball, so installation takes seconds and needs no local toolchain.
+**Settings → Plugin Market → search `dsh-run-button` → Install.** The market reads the registry, which prefers the npm package and falls back to the prebuilt tarball — either way installation takes seconds and needs no local toolchain.
 
-### With the `dsh` CLI
+### From npm, through the `dsh` CLI
 
 ```bash
-# the prebuilt tarball (what the market uses)
+dsh plugin --profile web add dsh-run-button
+```
+
+This resolves `dsh-run-button` from the npm registry, writes the profile's dependencies and its `dsh.profile.bundles` list, links the package, and mounts it. To remove it again:
+
+```bash
+dsh plugin --profile web remove dsh-run-button
+```
+
+Pin a version or work offline from the repo with either of these instead:
+
+```bash
+# the prebuilt tarball attached to the latest release
 dsh plugin --profile web add "https://github.com/EdwardXiao-bit/dsh-run-button/releases/latest/download/dsh-run-button.tgz"
 
-# or straight from the repository
+# straight from the repository source
 dsh plugin --profile web add github:EdwardXiao-bit/dsh-run-button
 ```
 
-Either form writes the profile's dependencies and its `dsh.profile.bundles` list, links the package, and mounts it.
-
-> **`npm install dsh-run-button` is not an install for DSH.** It fetches the package into `node_modules` but DSH only loads a plugin that appears in the profile's `bundles` list (or that ships its own bundle patch). Add it to the profile instead:
+> **Plain `npm install dsh-run-button` is not an install for DSH.** It fetches the package into `node_modules`, but DSH only loads a plugin that appears in the profile's `bundles` list (or that ships its own bundle patch), so nothing ever mounts. Add it to the profile by hand instead:
 
 ```json
 {

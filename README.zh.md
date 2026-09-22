@@ -63,25 +63,35 @@ DSH 把回答渲染成 Markdown，而代码框只提供一个操作：**复制**
 
 ## 安装
 
-本插件已收录进 DSH 社区插件目录，因此最省事的是走市场；也可以用 `dsh` 命令行，或从源码安装。
+本插件已发布到 npm，也已收录进 DSH 社区插件目录，所以有四种安装途径。前两种是绝大多数人需要的。
 
-### 市场一键安装（最省事）
+### 市场一键安装（最省事，不用终端）
 
-**设置 → 插件市场 → 搜 `dsh-run-button` → 安装。** 无需构建：目录里指向的是预构建包，几秒装完，用户机器不需要任何本地工具链。
+**设置 → 插件市场 → 搜 `dsh-run-button` → 安装。** 市场读的是插件目录，它会优先用 npm 包、否则用预构建 tarball——两种情况都是几秒装完，用户机器不需要任何本地工具链。
 
-### 用 `dsh` 命令行安装
+### 从 npm 装，用 `dsh` 命令行
 
 ```bash
-# 预构建包（市场用的就是它）
+dsh plugin --profile web add dsh-run-button
+```
+
+这条会从 npm registry 解析 `dsh-run-button`，写入 profile 的依赖与 `dsh.profile.bundles` 列表，建立链接并挂载。卸载：
+
+```bash
+dsh plugin --profile web remove dsh-run-button
+```
+
+如果只想钉版本、或从仓库离线安装，用下面任一条：
+
+```bash
+# 最新 Release 上的预构建 tarball
 dsh plugin --profile web add "https://github.com/EdwardXiao-bit/dsh-run-button/releases/latest/download/dsh-run-button.tgz"
 
-# 或者直接从仓库装
+# 直接从仓库源码装
 dsh plugin --profile web add github:EdwardXiao-bit/dsh-run-button
 ```
 
-两种写法都会写入 profile 的依赖与 `dsh.profile.bundles`、建立链接并挂载。
-
-> **`npm install dsh-run-button` 对 DSH 来说不算安装。** 它只是把包取到 `node_modules`，而 DSH 只会加载出现在 profile `bundles` 列表里的插件（或自带 bundle patch 的包）。正确做法是写进 profile：
+> **裸跑 `npm install dsh-run-button` 对 DSH 来说不算安装。** 它只是把包取到 `node_modules`，而 DSH 只加载出现在 profile `bundles` 列表里的插件（或自带 bundle patch 的包），所以什么都不会被挂载。要手动装就写进 profile：
 
 ```json
 {
