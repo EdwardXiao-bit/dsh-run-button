@@ -23,6 +23,7 @@
     "lib/**/*.js",
     "scripts/check-client.mjs",
     "scripts/simulate-client.mjs",
+    "scripts/test-host-mount.mjs",
     "cordis.patch.yml",
     "README.md",
     "README.zh.md",
@@ -62,8 +63,9 @@
     "node": "^22.19.0 || >=24.0.0"
   },
   "scripts": {
-    "check": "node --check lib/index.js && node scripts/check-client.mjs && node scripts/simulate-client.mjs",
-    "simulate": "node scripts/simulate-client.mjs"
+    "check": "node --check lib/index.js && node scripts/check-client.mjs && node scripts/simulate-client.mjs && node scripts/test-host-mount.mjs",
+    "simulate": "node scripts/simulate-client.mjs",
+    "test:host": "node scripts/test-host-mount.mjs"
   },
   "devDependencies": {
     "happy-dom": "^20.14.5"
