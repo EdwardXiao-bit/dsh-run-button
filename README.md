@@ -64,29 +64,41 @@ This is a **user-initiated** execution surface, and it is deliberately not more 
 
 ## Install
 
-### Into a local profile (development)
+This plugin is listed in the DSH community registry, so the shortest path is the market. It is also installable with the `dsh` CLI, or from source.
+
+### From the plugin market (easiest)
+
+**Settings → Plugin Market → search `dsh-run-button` → Install.** No build step: the registry points at a prebuilt tarball, so installation takes seconds and needs no local toolchain.
+
+### With the `dsh` CLI
+
+```bash
+# the prebuilt tarball (what the market uses)
+dsh plugin --profile web add "https://github.com/EdwardXiao-bit/dsh-run-button/releases/latest/download/dsh-run-button.tgz"
+
+# or straight from the repository
+dsh plugin --profile web add github:EdwardXiao-bit/dsh-run-button
+```
+
+Either form writes the profile's dependencies and its `dsh.profile.bundles` list, links the package, and mounts it.
+
+> **`npm install dsh-run-button` is not an install for DSH.** It fetches the package into `node_modules` but DSH only loads a plugin that appears in the profile's `bundles` list (or that ships its own bundle patch). Add it to the profile instead:
+
+```json
+{
+  "dependencies": { "dsh-run-button": "^0.1.0" },
+  "dsh": { "profile": { "bundles": ["...", "dsh-run-button"] } }
+}
+```
+
+### From source (development)
 
 ```bash
 # junction the package into the profile's node_modules, then mount it
 dsh dev inject <path-to>/dsh-run-button
 ```
 
-The super-injector's `dev_inject_plugin` takes the package directory. For a durable install, add it to the profile instead:
-
-```json
-{
-  "dependencies": { "dsh-run-button": "link:/absolute/path/to/dsh-run-button" },
-  "dsh": { "profile": { "bundles": ["...", "dsh-run-button"] } }
-}
-```
-
 Then restart DSH (or reload the page for the client half).
-
-### From npm
-
-```bash
-npm install dsh-run-button
-```
 
 ## Using it
 

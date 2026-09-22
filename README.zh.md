@@ -63,29 +63,41 @@ DSH 把回答渲染成 Markdown，而代码框只提供一个操作：**复制**
 
 ## 安装
 
-### 装进本地 profile（开发）
+本插件已收录进 DSH 社区插件目录，因此最省事的是走市场；也可以用 `dsh` 命令行，或从源码安装。
+
+### 市场一键安装（最省事）
+
+**设置 → 插件市场 → 搜 `dsh-run-button` → 安装。** 无需构建：目录里指向的是预构建包，几秒装完，用户机器不需要任何本地工具链。
+
+### 用 `dsh` 命令行安装
+
+```bash
+# 预构建包（市场用的就是它）
+dsh plugin --profile web add "https://github.com/EdwardXiao-bit/dsh-run-button/releases/latest/download/dsh-run-button.tgz"
+
+# 或者直接从仓库装
+dsh plugin --profile web add github:EdwardXiao-bit/dsh-run-button
+```
+
+两种写法都会写入 profile 的依赖与 `dsh.profile.bundles`、建立链接并挂载。
+
+> **`npm install dsh-run-button` 对 DSH 来说不算安装。** 它只是把包取到 `node_modules`，而 DSH 只会加载出现在 profile `bundles` 列表里的插件（或自带 bundle patch 的包）。正确做法是写进 profile：
+
+```json
+{
+  "dependencies": { "dsh-run-button": "^0.1.0" },
+  "dsh": { "profile": { "bundles": ["...", "dsh-run-button"] } }
+}
+```
+
+### 从源码安装（开发）
 
 ```bash
 # 把包 junction 进 profile 的 node_modules 并挂载
 dsh dev inject <path-to>/dsh-run-button
 ```
 
-超级注入器的 `dev_inject_plugin` 接受包目录。要持久安装则写进 profile：
-
-```json
-{
-  "dependencies": { "dsh-run-button": "link:/absolute/path/to/dsh-run-button" },
-  "dsh": { "profile": { "bundles": ["...", "dsh-run-button"] } }
-}
-```
-
 然后重启 DSH（客户端半边只需刷新页面）。
-
-### 从 npm 安装
-
-```bash
-npm install dsh-run-button
-```
 
 ## 使用
 
