@@ -116,7 +116,10 @@ const source = readFileSync(new URL('lib/client.js', root), 'utf8')
 const evaluate = new Function('window', 'document', 'console', `${source}\n`)
 const warnings = []
 const fakeConsole = {
-  log: (...args) => warnings.push(args.join(' ')),
+  log: (...args) => {
+    warnings.push(args.join(' '))
+    if (process.env.DBG === '1') console.log('    [bundle.log]', ...args)
+  },
   error: (...args) => warnings.push('ERROR ' + args.join(' ')),
   warn: (...args) => warnings.push('WARN ' + args.join(' ')),
 }
@@ -141,6 +144,8 @@ const closeTabCalls = []
 const runCommands = new Map()
 let runCounter = 0
 let lastRunId = null
+/** When set, the next run/start is answered with a refusal instead. */
+let failNextStart = false
 
 const slots = {
   inject(_name, callback) {
@@ -161,6 +166,12 @@ const connection = {
         return Promise.resolve({ ok: true, value: { platform: 'win32', workspaceRoot: 'C:\\Users\\Ed' } })
       }
       if (endpoint === 'start') {
+        if (failNextStart) {
+          failNextStart = false
+          // This is the shape the host returns when the executor refuses the run,
+          // e.g. an unusable sandbox mode.
+          return Promise.resolve({ ok: false, error: { code: 'run-failed', message: 'sandbox mode "workspace-write" is not usable on this host' } })
+        }
         runCounter += 1
         lastRunId = `run-${runCounter}`
         runCommands.set(lastRunId, args.command)
@@ -519,6 +530,130 @@ await new Promise((resolve) => setTimeout(resolve, 250))
 const cardsAfter = document.querySelectorAll('[data-dsh-run-inline]').length
 if (cardsAfter >= cardsBefore) {
   fail(`dismissing a chip did not drop its run (${cardsBefore} cards -> ${cardsAfter})`)
+}
+
+/* ------------------------------------------------------------------ *
+ * Dock card buttons: `collapse` and `close` must actually do something
+ *
+ * The harness used to assert on "the first card in the dock" while clicking a
+ * button on whichever card it found — with more than one card those are
+ * different runs, so a working handler looked like a dead one. Every helper
+ * below therefore identifies ONE card by its command text and tracks it.
+ * ------------------------------------------------------------------ */
+
+/** The command text of the last (newest) dock card. */
+function newestCardCommand() {
+  const cards = [...document.querySelectorAll('.dsh-runbtn-dock [data-dsh-run-inline]')]
+  if (cards.length === 0) return null
+  const last = cards[cards.length - 1]
+  return (last.querySelector('.dsh-runbtn-cmd')?.textContent ?? '').trim()
+}
+
+/** Find the one card whose command matches, so clicks and assertions agree. */
+function cardByCommand(command) {
+  return [...document.querySelectorAll('.dsh-runbtn-dock [data-dsh-run-inline]')]
+    .find((c) => (c.querySelector('.dsh-runbtn-cmd')?.textContent ?? '').trim() === command) ?? null
+}
+
+function cardStateFor(command) {
+  const card = cardByCommand(command)
+  return card === null ? null : card.getAttribute('data-dsh-run-inline')
+}
+
+/** Click one button on the card for `command`, then let the re-render settle. */
+async function clickCardButton(command, label) {
+  const card = cardByCommand(command)
+  if (card === null) fail(`no dock card for ${JSON.stringify(command)}`)
+  const button = [...card.querySelectorAll('button')].find((b) => (b.textContent ?? '').trim() === label) ?? null
+  if (button === null) fail(`card ${JSON.stringify(command)} has no ${label} button`)
+  button.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+  await new Promise((resolve) => setTimeout(resolve, 250))
+}
+
+// Start a fresh run and target THAT card.
+document.body.insertAdjacentHTML('beforeend', [
+  '<div class="_block_rsn9u_4 md-code-block">',
+  '<div class="_bannerWrap_rsn9u_24"><div class="_banner_rsn9u_24" data-code-block-banner>',
+  '<div class="_infostring_rsn9u_45">bash</div>',
+  '<div class="_action_rsn9u_56"><button class="_copyButton_rsn9u_62">Copy</button></div>',
+  '</div></div>',
+  '<div class="_content_rsn9u_74" data-code-block-content><pre>echo poke</pre></div>',
+  '</div>',
+].join(''))
+await new Promise((resolve) => setTimeout(resolve, 300))
+
+const pokeChips = document.querySelectorAll('[data-dsh-run-button]')
+pokeChips[pokeChips.length - 1].dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+await new Promise((resolve) => setTimeout(resolve, 400))
+
+const targetCommand = newestCardCommand()
+if (targetCommand === null) fail('no dock card after starting a run')
+
+// --- collapse ---
+if (cardStateFor(targetCommand) !== 'expanded') {
+  fail(`card starts as ${JSON.stringify(cardStateFor(targetCommand))}, expected expanded`)
+}
+await clickCardButton(targetCommand, 'collapse')
+if (cardStateFor(targetCommand) !== 'collapsed') {
+  fail(`collapse produced ${JSON.stringify(cardStateFor(targetCommand))}, expected 'collapsed'`)
+}
+
+// --- expand back ---
+await clickCardButton(targetCommand, 'expand')
+if (cardStateFor(targetCommand) !== 'expanded') fail('expand did not restore the card')
+
+// --- close ---
+if (cardByCommand(targetCommand) === null) fail('card vanished before close could be tested')
+await clickCardButton(targetCommand, 'close')
+if (cardByCommand(targetCommand) !== null) fail('close did not remove the card')
+
+/* ------------------------------------------------------------------ *
+ * A refused run/start must be VISIBLE, not just a red chip
+ *
+ * Reported from the real UI: the chip turned red and nothing else happened, so
+ * the reason (an unusable sandbox mode) was invisible without devtools.
+ * ------------------------------------------------------------------ */
+
+document.body.insertAdjacentHTML('beforeend', [
+  '<div class="_block_rsn9u_4 md-code-block">',
+  '<div class="_bannerWrap_rsn9u_24"><div class="_banner_rsn9u_24" data-code-block-banner>',
+  '<div class="_infostring_rsn9u_45">bash</div>',
+  '<div class="_action_rsn9u_56"><button class="_copyButton_rsn9u_62">Copy</button></div>',
+  '</div></div>',
+  '<div class="_content_rsn9u_74" data-code-block-content><pre>echo refused</pre></div>',
+  '</div>',
+].join(''))
+await new Promise((resolve) => setTimeout(resolve, 300))
+
+failNextStart = true
+const refusedChips = document.querySelectorAll('[data-dsh-run-button]')
+refusedChips[refusedChips.length - 1].dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+await new Promise((resolve) => setTimeout(resolve, 400))
+
+// The strip is a React component and this harness's useState setter is a stub,
+// so re-render it by hand the way React would after `notify()`.
+const failureTree = renderStrip().tree
+if (failureTree === null) fail('the composer strip did not render after a refusal')
+const failureNotice = findElement(failureTree, (node) => typeof node.props?.className === 'string' && node.props.className.indexOf('-fail') >= 0)
+if (failureNotice === null) {
+  fail('a refused run/start rendered no visible notice (only a red chip)')
+}
+const failureText = textOf(failureNotice)
+if (!failureText.includes('not usable on this host')) {
+  fail(`the failure notice does not carry the reason: ${JSON.stringify(failureText)}`)
+}
+const refusedChip = document.querySelectorAll('[data-dsh-run-button]')[document.querySelectorAll('[data-dsh-run-button]').length - 1]
+if (refusedChip.getAttribute('data-dsh-run-button') !== 'failed') {
+  fail(`the refused chip is ${JSON.stringify(refusedChip.getAttribute('data-dsh-run-button'))}, expected failed`)
+}
+
+// And dismissing it clears the notice.
+const dismiss = findElement(failureNotice, (node) => typeof node.props?.className === 'string' && node.props.className.indexOf('-failClose') >= 0)
+if (dismiss === null) fail('the failure notice has no dismiss button')
+dismiss.props.onClick()
+const afterDismiss = renderStrip().tree
+if (findElement(afterDismiss, (node) => typeof node.props?.className === 'string' && node.props.className.indexOf('-fail') >= 0) !== null) {
+  fail('dismissing the failure notice did not clear it')
 }
 
 const errors = warnings.filter((line) => line.startsWith('ERROR'))
