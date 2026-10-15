@@ -509,6 +509,42 @@ for (let index = 0; index < openTabCalls.length; index += 1) {
 }
 
 /* ------------------------------------------------------------------ *
+ * Placement: panel tabs open in the right Sidebar by default, and the
+ * Right/Bottom switch moves existing runs to the other place
+ * ------------------------------------------------------------------ */
+
+// Every tab opened so far (panel mode, default placement) must target the right Sidebar.
+const wrongTarget = openTabCalls.filter((seed) => seed.target !== 'right')
+if (wrongTarget.length > 0) {
+  fail(`default placement should be "right", saw ${JSON.stringify(wrongTarget.map((seed) => seed.target))}`)
+}
+
+const placementTitle = (needle) => (node) => typeof node.props?.title === 'string' && node.props.title.indexOf(needle) >= 0
+const bottomSwitch = findElement(renderStrip().tree, placementTitle('bottom workbench'))
+if (bottomSwitch === null) fail('the Bottom placement switch was not rendered in panel mode')
+const tabsBeforeMove = openTabCalls.length
+bottomSwitch.props.onClick()
+await new Promise((resolve) => setTimeout(resolve, 200))
+const movedTabs = openTabCalls.slice(tabsBeforeMove)
+if (movedTabs.length === 0) fail('switching placement reopened no tab')
+if (movedTabs.some((seed) => seed.target !== 'bottom')) {
+  fail(`after choosing Bottom, tabs should target "bottom": ${JSON.stringify(movedTabs.map((seed) => seed.target))}`)
+}
+if (window.localStorage.getItem('dsh-run-button:prefs').indexOf('"placement":"bottom"') < 0) {
+  fail('the placement choice was not persisted')
+}
+
+// Back to Right, so the rest of the run (and the user) ends on the default.
+const rightSwitch = findElement(renderStrip().tree, placementTitle('right Sidebar'))
+if (rightSwitch === null) fail('the Right placement switch was not rendered')
+const tabsBeforeBack = openTabCalls.length
+rightSwitch.props.onClick()
+await new Promise((resolve) => setTimeout(resolve, 200))
+if (openTabCalls.slice(tabsBeforeBack).some((seed) => seed.target !== 'right')) {
+  fail('after choosing Right again, tabs should target "right"')
+}
+
+/* ------------------------------------------------------------------ *
  * Chip dismissal: each run chip drops its own run
  * ------------------------------------------------------------------ */
 
@@ -518,6 +554,9 @@ if (dockToggle === null) fail('the Dock mode toggle was not rendered')
 dockToggle.props.onClick()
 await new Promise((resolve) => setTimeout(resolve, 200))
 
+if (findElement(renderStrip().tree, placementTitle('right Sidebar')) !== null) {
+  fail('the placement switch should only appear in panel mode')
+}
 const dismissTree = renderStrip().tree
 const chipClose = findElement(dismissTree, (node) => typeof node.props?.className === 'string' && node.props.className.indexOf('-chipClose') >= 0)
 if (chipClose === null) fail('run chips have no dismiss button')
