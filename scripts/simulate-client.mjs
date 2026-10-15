@@ -418,6 +418,10 @@ if (strip === undefined) fail('the composer run strip was never registered')
 
 const stripView = renderStrip()
 if (stripView.toggle === null) fail('the Panel mode toggle was not rendered')
+{
+  // Runs already exist here (the dock section above started one), so the strip is solid.
+  if (stripView.tree.props['data-idle'] !== '0') fail('a strip with runs must not be idle/faint')
+}
 stripView.toggle.props.onClick()
 await new Promise((resolve) => setTimeout(resolve, 200))
 
@@ -638,6 +642,7 @@ const failureNotice = findElement(failureTree, (node) => typeof node.props?.clas
 if (failureNotice === null) {
   fail('a refused run/start rendered no visible notice (only a red chip)')
 }
+if (failureTree.props['data-idle'] !== '0') fail('a strip showing a failure must not be faint')
 const failureText = textOf(failureNotice)
 if (!failureText.includes('not usable on this host')) {
   fail(`the failure notice does not carry the reason: ${JSON.stringify(failureText)}`)
@@ -654,6 +659,24 @@ dismiss.props.onClick()
 const afterDismiss = renderStrip().tree
 if (findElement(afterDismiss, (node) => typeof node.props?.className === 'string' && node.props.className.indexOf('-fail') >= 0) !== null) {
   fail('dismissing the failure notice did not clear it')
+}
+
+/* ------------------------------------------------------------------ *
+ * Idle strip: no runs and no failure -> faint (not hidden), switches still there
+ * ------------------------------------------------------------------ */
+
+for (let guard = 0; guard < 20; guard += 1) {
+  const close = findElement(renderStrip().tree, (node) => typeof node.props?.className === 'string' && node.props.className.indexOf('-chipClose') >= 0)
+  if (close === null) break
+  close.props.onClick()
+  await new Promise((resolve) => setTimeout(resolve, 60))
+}
+{
+  const idleTree = renderStrip().tree
+  if (idleTree.props['data-idle'] !== '1') fail('a strip with no runs and no failure should be marked idle (faint)')
+  if (findElement(idleTree, (node) => typeof node.props?.title === 'string' && node.props.title.indexOf('bottom-right corner') >= 0) === null) {
+    fail('the idle strip must keep the mode switches, or the mode could never be changed before a first run')
+  }
 }
 
 const errors = warnings.filter((line) => line.startsWith('ERROR'))
